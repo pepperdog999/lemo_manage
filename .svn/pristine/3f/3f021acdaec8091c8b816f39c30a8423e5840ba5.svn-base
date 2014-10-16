@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlGroup name="product">
+	<sql id="getProductGroupList">
+		select pg.ProductGroupID DataID,2 DataType,pg.ClassID,pg.CatalogID
+		,pg.GroupName Info1,pg.Desc Info2,pg.StartTime TimeInfo,pp.PhotoURL
+		from mall_productgroup pg
+		left join (select min(PhotoID) PhotoID,ProductGroupID,PhotoURL from mall_productgroupgallary pgg group by pgg.ProductGroupID) pp on pp.ProductGroupID=pg.ProductGroupID
+		where pg.intState=1 and pg.MallID=? and pg.ClassID=?
+	</sql>
+	<sql id="getProductList">
+		select pi.ProductID DataID,1 DataType,pi.ClassID,pi.CatalogID
+		,pi.ProductName Info1,pi.Desc Info2,pi.StartTime TimeInfo,pp.PhotoURL
+		from mall_productinfo pi
+		left join (select min(PhotoID) PhotoID,ProductID,PhotoURL from mall_productgallary pg group by pg.ProductID) pp on pp.ProductID=pi.ProductID
+		where pi.intState=1 and pi.MallID=? and pi.ClassID=?
+	</sql>
+	<sql id="getProductInfo">
+		select pi.ProductID,pi.ProductName,pi.ProductCode,pi.Content,pi.Desc
+		,pi.Price,pi.Discount,pi.StartTime TimeInfo
+		,si.shopID,si.ShopName,CONCAT(ai.AraeName,'-',si.ShopNo) AreaInfo
+		,IFNULL(uf.FavorID,0) FavorID
+		from mall_productinfo pi
+		left join mall_shopinfo si on pi.ShopID=si.shopID
+		left join mall_areainfo ai on ai.AreaID=si.AreaID
+		left join sys_userfavor uf on uf.ProductID=pi.ProductID and uf.UserID=?
+		where pi.intState=1 and pi.ProductID=?
+	</sql>
+</sqlGroup>
+

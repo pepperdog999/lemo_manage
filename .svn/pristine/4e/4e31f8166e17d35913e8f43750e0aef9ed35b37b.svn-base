@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlGroup name="activity">
+	<sql id="getActivityList-select">
+		select ai.ActivityID,ai.ActivityName Info1,ai.Desc Info2,ai.Address AddressInfo,ai.StartTime TimeInfo,pp.PhotoURL
+	</sql>
+	<sql id="getActivityList-from">		
+		from mall_activityinfo ai
+		left join (select min(PhotoID) PhotoID,ActivityID,PhotoURL from mall_activitygallary ag group by ag.ActivityID) pp on pp.ActivityID=ai.ActivityID
+		where ai.intState=1 and ai.MallID=?
+	</sql>
+	<sql id="getActivityInfo">
+		select ai.ActivityID,ai.ActivityName,ai.ActivityCode,ai.Content,ai.Desc
+		,ai.Address,ai.StartTime TimeInfo
+		,IFNULL(uf.FollowID,0) FollowID,IFNULL(ue.EnrollID,0) EnrollID
+		from mall_activityinfo ai
+		left join sys_userfollow uf on uf.ActivityID=ai.ActivityID and uf.UserID=?
+		left join sys_userenroll ue on ue.ActivityID=ai.ActivityID and ue.UserID=?
+		where ai.intState=1 and ai.ActivityID=?
+	</sql>
+</sqlGroup>
+

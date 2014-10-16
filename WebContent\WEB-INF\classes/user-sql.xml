@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlGroup name="user">
+	<sql id="sysLogin">
+		SELECT u.UserID,u.Caption,u.LoginName,r.RoleID,r.roleName
+		FROM sys_users u
+		LEFT JOIN sys_roles r ON r.RoleID=u.RoleID
+		WHERE trim(u.LoginName)=? AND trim(u.Password)=?
+	</sql>
+	<sql id="userLoginIdentify">
+		select u.UserID,u.LoginName,u.Password,u.Caption,up.NickName
+		,up.Sign,up.SexID,ed.Caption SexCaption,up.LevelID
+		from sys_users u
+		left join sys_userprofile up on up.UserID=u.UserID
+		left join sys_enumdetail ed on ed.DetailID=up.SexID
+		left join sys_userlevel ul on ul.LevelID=up.LevelID
+		where u.LoginName=? and u.Password=?
+	</sql>
+</sqlGroup>
+

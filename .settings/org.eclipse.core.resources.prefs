@@ -1,0 +1,13 @@
+eclipse.preferences.version=1
+encoding//WebContent/banner.html=UTF-8
+encoding//src/com/lemo/manage/mall/AreaInfo.java=UTF-8
+encoding//src/com/lemo/manage/mall/MallInfo.java=UTF-8
+encoding//src/com/lemo/manage/mall/ShopInfo.java=UTF-8
+encoding//src/com/lemo/manage/user/UserDevice.java=UTF-8
+encoding//src/com/lemo/manage/user/UserEnroll.java=UTF-8
+encoding//src/com/lemo/manage/user/UserFavor.java=UTF-8
+encoding//src/com/lemo/manage/user/UserFollow.java=UTF-8
+encoding//src/com/lemo/manage/user/UserInfo.java=UTF-8
+encoding//src/com/lemo/manage/user/UserProfile.java=UTF-8
+encoding//src/lemo_config.properties=UTF-8
+encoding/<project>=UTF-8

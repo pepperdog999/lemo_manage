@@ -1,0 +1,501 @@
+package com.lemo.manage.service;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import net.sf.json.JSONObject;
+
+import com.jfinal.aop.Before;
+import com.jfinal.ext.plugin.sqlinxml.SqlKit;
+import com.jfinal.ext.route.ControllerBind;
+import com.jfinal.plugin.activerecord.Db;
+import com.jfinal.plugin.activerecord.Record;
+import com.jfinal.plugin.activerecord.tx.Tx;
+import com.lemo.manage.comm.BaseController;
+import com.lemo.manage.comm.CommOpration;
+import com.lemo.manage.mall.AreaInfo;
+import com.lemo.manage.mall.ShopInfo;
+import com.lemo.manage.user.UserEnroll;
+import com.lemo.manage.user.UserFavor;
+import com.lemo.manage.user.UserFollow;
+import com.lemo.manage.user.UserInfo;
+import com.lemo.manage.user.UserProfile;
+import com.lemo.manage.utility.DateUtils;
+import com.lemo.manage.utility.StringTool;
+import com.lemo.manage.utility.PropertiesFactoryHelper;
+import com.lemo.manage.user.UserDevice;
+
+@ControllerBind(controllerKey = "/service")
+public class ServiceController extends BaseController implements CommOpration{
+	
+	@Override
+	public void index(){
+	}
+	
+	// ********************  //
+	// 以下业务基础对象相关接口  //
+	// ********************  //
+	
+	// 获得shopping mall列表数据
+	public void GetMallList(){
+		int cityID = getParaToInt("cityID");
+		String coordinate = getPara("coordinate");
+		
+		String sqlSelect = "select mb.MallID,mb.CityID,mb.MallName,mb.MallCode \n"
+				+",mb.CoordinateInfo,mb.CoordinateInfo,mb.BeaconUID,mb.LogoURL";
+		String sqlFrom = "from mall_baseinfo mb \n"
+				+"where mb.intState=1 and mb.CityID=?";
+		if(StringTool.notNull(getPara("key")) && StringTool.notBlank(getPara("key"))){
+			sqlFrom += " and c.CorpName like '%"+getPara("key")+"%'";
+		}
+		if (StringTool.notNull(getPara("pageIndex"))&&StringTool.notBlank(getPara("pageIndex"))){
+			renderJson(Db.paginate(getParaToInt("pageIndex"), getParaToInt("pageSize",5), sqlSelect, sqlFrom, cityID));
+		}else{
+			renderJson("list",Db.find(sqlSelect+" \n"+sqlFrom, cityID));
+		}
+	}
+	
+	public void GetMallDetail(){
+		
+	}
+	
+	public void GetShopDetail(){
+		String shopID = getPara("shopID");
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		data.put("shopInfo", ShopInfo.dao.findFirst("select si.*,ai.AreaName \n"
+				+ "from mall_shopinfo si \n"
+				+ "left join mall_areainfo ai on ai.AreaID=si.AreaID \n"
+				+ "where si.ShopID=?",shopID));
+		data.put("productList", Db.find(SqlKit.sql("product.getProductListByShop"),shopID));
+		renderJson("data",data);		
+	}
+	
+	public void GetAreaDetail(){
+		int areaID = getParaToInt("areaID");
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		data.put("areaInfo", AreaInfo.dao.findById(areaID));
+		data.put("activityList", Db.find(SqlKit.sql("activity.getActivityListByArea"),areaID));
+		renderJson("data",data);
+	}
+	
+	//获得产品分类数据
+	public void GetMallClass(){
+		String mallID = getPara("mallID");
+		String sql = "select ci.ClassID,ci.MallID,ci.ClassName,ci.CSSType \n"
+				+ "from mall_classinfo ci \n"
+				+ "where ci.MallID=?";
+		renderJson("list",Db.find(sql,mallID));
+	}
+	
+	//获得产品分类的目录数据
+	public void GetProductCatalog(){
+		String mallID = getPara("mallID");
+		int classID = getParaToInt("classID");
+		String sql = "select pc.CatalogID,pc.ClassID,pc.MallID,pc.CatalogName \n"
+				+ "from mall_productcatalog pc \n"
+				+ "where pc.MallID=? and pc.ClassID=?";
+		renderJson("list",Db.find(sql,mallID,classID));
+	}
+	
+	//获得产品（组）列表
+	public void GetProductList(){
+		String mallID = getPara("mallID");
+		int classID = getParaToInt("classID");
+		int pageSize = getParaToInt("pageSize",5);
+		
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		String sqlProductGroup = SqlKit.sql("product.getProductGroupList");
+		if(StringTool.notNull(getPara("catalogID"))){
+			sqlProductGroup += " and pg.CatalogID="+getParaToInt("catalogID");
+		}
+		if(StringTool.notNull(getPara("productGroupID"))){
+			sqlProductGroup += " and 1=0";
+		}
+		List<Record> rs1  = Db.find(sqlProductGroup, mallID, classID);
+		String sqlProduct = SqlKit.sql("product.getProductList");
+		if(StringTool.notNull(getPara("catalogID"))){
+			sqlProduct += " and pi.CatalogID="+getParaToInt("catalogID");
+		}
+		sqlProduct += " and pi.ProductGroupID="+getParaToInt("productGroupID",0);
+		List<Record> rs2  = Db.find(sqlProduct, mallID, classID);
+		rs1.addAll(rs2);
+		if (StringTool.notNull(getPara("pageIndex"))&&StringTool.notBlank(getPara("pageIndex"))){
+			data.put("list",rs1.subList((getParaToInt("pageIndex")-1)*pageSize, 
+					getParaToInt("pageIndex")*pageSize>rs1.size()?rs1.size():getParaToInt("pageIndex")*pageSize));
+			data.put("totalPage", Math.ceil(rs1.size()/pageSize));
+			data.put("pageIndex", getParaToInt("pageIndex"));
+			renderJson(data);
+		}else{
+			renderJson("list",rs1);
+		}
+	}
+	
+	//获得产品详细信息
+	public void GetProductInfo(){
+		int productID = getParaToInt("productID");
+		String userID = getPara("userID") == null? "0":getPara("userID") ;
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		data.put("productInfo", Db.findFirst(SqlKit.sql("product.getProductInfo"),userID,productID));
+		data.put("productGallary", Db.find("select PhotoID,PhotoURL from mall_productgallary where ProductID=?",productID));
+		renderJson("data",data);
+		
+	}
+	
+	public void GetInfoByiBeacon(){
+		JSONObject jo = JSONObject.fromObject(getPara("iBeaconInfo"));
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		Boolean r = false;
+		List<Record> rs1 = Db.find(SqlKit.sql("product.getProductListByBeacon"),jo.get("BeaconUID"),jo.get("Major"));
+		List<Record> rs2 = Db.find(SqlKit.sql("activity.getActivityListByBeacon"),jo.get("BeaconUID"),jo.get("Major"));
+		rs1.addAll(rs2);
+		if(rs1.size()>0){
+			data.put("Data", rs1);
+			r = true;
+		}
+		data.put("Result", r);
+		renderJson(data);
+	}
+	// ********************  //
+	// 以下部分为活动相关接口  //
+	// ********************  //
+	
+	public void GetActivityList(){
+		String mallID = getPara("mallID");
+		
+		String sqlSelect = SqlKit.sql("activity.getActivityList-select");
+		String sqlFrom = SqlKit.sql("activity.getActivityList-from");
+		
+		if(StringTool.notNull(getPara("key")) && StringTool.notBlank(getPara("key"))){
+			sqlFrom += " and ai.ActivityName like '%"+getPara("key")+"%'";
+		}
+		if (StringTool.notNull(getPara("pageIndex"))&&StringTool.notBlank(getPara("pageIndex"))){
+			renderJson(Db.paginate(getParaToInt("pageIndex"), getParaToInt("pageSize",5), sqlSelect, sqlFrom, mallID));
+		}else{
+			renderJson("list",Db.find(sqlSelect+" \n"+sqlFrom, mallID));
+		}
+		
+	}
+	
+	public void GetActivityInfo(){
+		int activityID = getParaToInt("activityID");
+		String userID = getPara("userID") == null? "0":getPara("userID") ;
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		data.put("activityInfo", Db.findFirst(SqlKit.sql("activity.getActivityInfo"),userID,userID,activityID));
+		data.put("activityGallary", Db.find("select PhotoID,PhotoURL from mall_activitygallary where ActivityID=?",activityID));
+		renderJson("data",data);
+	}
+	
+	// ********************  //
+	// 以下部分为系统相关接口  //
+	// ********************  //
+	
+	@Before(Tx.class)
+	public void UserRegister(){
+		String userName = getPara("userName");
+		String password = getPara("password");
+		int sexID = getParaToInt("sexID",14);
+		boolean r = false;
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		StringBuffer msg = new StringBuffer("");
+		if (checkAccountRule(userName,msg)){
+			String userID = UUID.randomUUID().toString();
+			r=new UserInfo().set("UserID", userID).set("LoginName",userName).set("RoleID", 4).set("Caption", "注册用户")
+				.set("Password", password).set("CreateDate", DateUtils.nowDateTime())
+				.set("CreateUserID", "888888").set("intState", 1).save();
+			if(r){
+				r=new UserProfile().set("UserID", userID).set("SexID", sexID)
+						.set("Point", 0).set("LevelID", 1).save();
+				msg.append("用户注册成功，欢迎进入乐生活平台！");
+			}
+		}else{
+			msg.append("用户注册失败，请重试！");
+		}
+		data.put("Result", r);
+		data.put("Msg", msg.toString());
+		if(r){
+			Record rs = Db.findFirst(SqlKit.sql("user.userLoginIdentify"),userName,password);
+			data.put("UserInfo", rs);
+			data.put("HeaderURL", PropertiesFactoryHelper.getInstance().getConfig("resource.url")+"user/"+rs.get("UserID")
+					+PropertiesFactoryHelper.getInstance().getConfig("user.header"));
+		}
+		renderJson(data);
+	}
+	
+	private boolean checkAccountRule(String userName,StringBuffer msg){
+		Boolean result = false;
+		String sql = "select UserID from sys_users where LoginName=?";
+		if(Db.find(sql,userName).size()>0){
+			msg.append("该账号已注册，请更换账号后重试！");
+		}else{
+			result = true;
+		}
+		return result;
+	}
+	
+	public void UserLoginIdentify(){
+		String userName = getPara("userName");
+		String password = getPara("password");
+		boolean r =false;
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		String msg = "";
+		String header_URL = "";
+		List<Record> rs = Db.find(SqlKit.sql("user.userLoginIdentify"),userName,password);
+		if (rs.size()>0){
+			msg = "登录验证成功！";
+			r = true ;
+			header_URL = PropertiesFactoryHelper.getInstance().getConfig("resource.url")+"user/"+rs.get(0).get("UserID")
+					+PropertiesFactoryHelper.getInstance().getConfig("user.header");
+		}else{
+			Record record_user=Db.findFirst("select u.Caption,u.Password,u.intState from sys_users u where u.LoginName=?",userName);
+			if(record_user==null){
+				msg = "用户账号不存在！";
+			}else if(record_user.getInt("intState")==0){
+				msg = "用户账号已停用！";
+			}else if(record_user.get("Password")!=password){
+				msg = "密码错误！";
+			}else{
+				msg = "登录验证错误！";
+			}
+			
+		}
+		data.put("Result", r);
+		data.put("Msg",msg);
+		if(r){
+			data.put("UserInfo", rs.get(0));
+			data.put("HeaderURL", header_URL);
+		}
+		renderJson(data);
+	}
+	
+	//用户设备信息注册
+	public void RegisterDeviceInfo(){
+		String userID = getPara("userID");
+		String deviceInfo = getPara("deviceInfo");
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		boolean r = false;		
+		JSONObject jo =JSONObject.fromObject(deviceInfo);
+		if (StringTool.notBlank(jo.getString("DeviceToken")) && StringTool.notNull(jo.getString("DeviceToken")) ){
+			Db.update("update sys_userDevice set intActive=0 where UserID=? and OSType=?",userID,jo.get("OSType"));
+			UserDevice ud=UserDevice.dao.findFirst("select * from sys_userDevice where UserID=? and AppCode=? and DeviceToken=?",userID,jo.get("DeviceToken"));
+			if(ud != null){
+				r=ud.set("OSType", jo.get("OSType")).set("OSVersion", jo.get("OSVersion")).set("intActive", 1)
+						.set("UpdateTime", DateUtils.nowDateTime()).update();
+			}else{
+				r= new UserDevice().set("UserID", userID).set("DeviceToken", jo.get("DeviceToken")).set("OSType", jo.get("OSType"))
+						.set("OSVersion", jo.get("OSVersion")).set("intActive", 1).set("RegisterTime", DateUtils.nowDateTime()).save();
+			}
+		}
+		data.put("Result", r);
+		if(r){
+			data.put("Msg","用户设备信息注册成功！");
+		}else{
+			data.put("Msg","用户设备信息注册失败！");
+		}
+		renderJson(data);
+
+	}
+	
+	//用户更新个人信息接口
+	@Before(Tx.class)
+	public void UpdateUserProfile(){
+		String userID = getPara("userID");
+		String userProfile = getPara("userProfile");
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		boolean r = false;		
+		JSONObject jo =JSONObject.fromObject(userProfile);
+		UserProfile up=UserProfile.dao.findFirst("select * from sys_userProfile where UserID=?",userID);
+		if(up != null){
+			if(jo.get("SexID") != null){
+				r=up.set("SexID", jo.get("SexID")).update();
+			}else if(jo.get("NickName") != null){
+				r=up.set("NickName", jo.get("NickName")).update();
+			}else if(jo.get("Sign") != null){
+				r=up.set("Sign", jo.get("Sign")).update();
+			}				
+		}
+		data.put("Result", r);
+		if(r){
+			data.put("Msg","用户信息更新成功！");
+		}else{
+			data.put("Msg","用户信息更新失败！");
+		}
+		renderJson(data);
+	}
+
+	// 用户密码更新接口
+	@Before(Tx.class)
+	public void ChangePassword(){
+		Object[] cookieArray = getCookieContext();
+		String newPwd = getPara("newPwd");
+		String userID = getPara("userID") == null ? cookieArray[0].toString() : getPara("userID");
+		boolean r = false;
+		StringBuffer msg = new StringBuffer("");
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		UserInfo ui = new UserInfo().findFirst("select * from sys_users u where u.UserID=?",userID);
+		String oldPwd = getPara("oldPwd") == null ? ui.getStr("Password") : getPara("oldPwd");
+		if (ui.getInt("intState")==0){
+			msg.append("用户已停用，不允许更改密码！");
+		}else if(!oldPwd.equals(ui.getStr("Password"))){
+			msg.append("原始密码输入错误，请重新输入！");
+		}else{
+			if (checkPasswordRule(ui.getStr("Password"),newPwd,msg)){
+				r = ui.set("Password", newPwd).update();
+				if(r){
+					msg.append("亲爱的用户【"+ui.getStr("Caption")+"】，你的密码更新成功！");
+				}else{
+					msg.append("用户密码更新失败，请重新设置！");
+				}		
+			}
+		}
+		data.put("Result", r);
+		data.put("Msg", msg.toString());
+		renderJson(data);
+	}
+	
+	private Boolean checkPasswordRule(String oldPwd,String newPwd,StringBuffer msg){
+		Boolean result = false;
+		if (newPwd.length()>=6){
+			if (newPwd.equals(oldPwd)==false){
+				result=true;
+			}else{
+				msg.append("新密码与旧密码相同，请重新设置！");
+			}
+		}else{
+			msg.append("新密码长度小于6个字符，请重新设置！");
+		}
+		return result;
+	}
+
+	// ********************  //
+	// 以下部分为用户中心接口  //
+	// ********************  //
+	
+	public void AddUserFavor(){
+		int productID = getParaToInt("productID");
+		String userID = getPara("userID");
+		boolean r = false;
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		r = new UserFavor().set("ProductID",productID).set("UserID",userID)
+				.set("AddTime", DateUtils.nowDateTime()).save();
+		data.put("Result", r);
+		if(r){
+			data.put("Msg", "商品收藏成功！");
+		}else{
+			data.put("Msg", "商品收藏失败！");
+		}
+		renderJson(data);
+	}
+	
+	public void RemoveUserFavor(){
+		String userID = getPara("userID");
+		int productID = getParaToInt("productID");
+		Map<String,Object> data = new HashMap<String,Object>();
+		if(Db.update("delete from sys_userfavor where UserID=? and ProductID=?",userID,productID)>0){
+			data.put("Result", true);
+			data.put("Msg","应用收藏移除成功！");
+		}else{
+			data.put("Result", false);
+			data.put("Msg","应用收藏移除失败！");
+		}
+		renderJson(data);
+	}
+	
+	public void GetUserFavorList(){
+		String userID = getPara("userID");
+		String sqlSelect = "select uf.FavorID,uf.ProductID,pi.ProductName Info1,pi.Desc Info2,pi.Price,pp.PhotoURL";
+		String sqlFrom ="from sys_userfavor uf \n"
+				+"left join mall_productinfo pi on pi.ProductID=uf.ProductID \n"
+				+"left join (select min(PhotoID) PhotoID,ProductID,PhotoURL from mall_productgallary pg group by pg.ProductID) pp on pp.ProductID=pi.ProductID \n"
+				+"where uf.UserID=?";
+		if (StringTool.notNull(getPara("pageIndex"))&&StringTool.notBlank(getPara("pageIndex"))){
+			renderJson(Db.paginate(getParaToInt("pageIndex"), getParaToInt("pageSize",10), sqlSelect, sqlFrom,userID));
+		}else{
+			renderJson("list",Db.find(sqlSelect+" \n"+sqlFrom,userID));
+		}
+	}
+
+	public void AddUserFollow(){
+		int activityID = getParaToInt("activityID");
+		String userID = getPara("userID");
+		boolean r = false;
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		r = new UserFollow().set("ActivityID",activityID).set("UserID",userID)
+				.set("AddTime", DateUtils.nowDateTime()).save();
+		data.put("Result", r);
+		if(r){
+			data.put("Msg", "活动关注成功！");
+		}else{
+			data.put("Msg", "活动关注失败！");
+		}
+		renderJson(data);
+	}
+	
+	public void RemoveUserFollow(){
+		String userID = getPara("userID");
+		int activityID = getParaToInt("activityID");
+		Map<String,Object> data = new HashMap<String,Object>();
+		if(Db.update("delete from sys_userfollow where UserID=? and ActivityID=?",userID,activityID)>0){
+			data.put("Result", true);
+			data.put("Msg","活动关注移除成功！");
+		}else{
+			data.put("Result", false);
+			data.put("Msg","活动关注移除失败！");
+		}
+		renderJson(data);
+	}
+	
+	public void GetUserFollowList(){
+		String userID = getPara("userID");
+		String sqlSelect = "select uf.FollowID,uf.ActivityID,ai.ActivityName Info1,ai.Desc Info2,ai.StartTime,pp.PhotoURL";
+		String sqlFrom ="from sys_userfollow uf \n"
+				+"left join mall_activityinfo ai on ai.ActivityID=uf.ActivityID \n"
+				+"left join (select min(PhotoID) PhotoID,ActivityID,PhotoURL from mall_activitygallary ag group by ag.ActivityID) pp on pp.ActivityID=ai.ActivityID \n"
+				+"where uf.UserID=?";
+		if (StringTool.notNull(getPara("pageIndex"))&&StringTool.notBlank(getPara("pageIndex"))){
+			renderJson(Db.paginate(getParaToInt("pageIndex"), getParaToInt("pageSize",10), sqlSelect, sqlFrom,userID));
+		}else{
+			renderJson("list",Db.find(sqlSelect+" \n"+sqlFrom,userID));
+		}
+	}
+	
+	public void AddUserEnroll(){
+		int activityID = getParaToInt("activityID");
+		String userID = getPara("userID");
+		boolean r = false;
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		r = new UserEnroll().set("ActivityID",activityID).set("UserID",userID)
+				.set("AddTime", DateUtils.nowDateTime()).save();
+		data.put("Result", r);
+		if(r){
+			data.put("Msg", "活动报名成功！");
+		}else{
+			data.put("Msg", "活动报名失败！");
+		}
+		renderJson(data);
+	}
+	
+	//用户对活动给出评价
+	public void AddUserEnrollFeedback(){
+		int activityID = getParaToInt("activityID");
+		String userID = getPara("userID");
+		String feedback = getPara("feedback");
+		boolean r = false;
+		Map<Object, Object> data = new HashMap<Object, Object>();
+		
+	}
+	public void GetUserEnrollList(){
+		String userID = getPara("userID");
+		String sqlSelect = "select ue.EnrollID,ue.ActivityID,ai.ActivityName Info1,ai.Desc Info2,ai.StartTime,pp.PhotoURL";
+		String sqlFrom ="from sys_userenroll ue \n"
+				+"left join mall_activityinfo ai on ai.ActivityID=ue.ActivityID \n"
+				+"left join (select min(PhotoID) PhotoID,ActivityID,PhotoURL from mall_activitygallary ag group by ag.ActivityID) pp on pp.ActivityID=ai.ActivityID \n"
+				+"where ue.UserID=?";
+		if (StringTool.notNull(getPara("pageIndex"))&&StringTool.notBlank(getPara("pageIndex"))){
+			renderJson(Db.paginate(getParaToInt("pageIndex"), getParaToInt("pageSize",10), sqlSelect, sqlFrom,userID));
+		}else{
+			renderJson("list",Db.find(sqlSelect+" \n"+sqlFrom,userID));
+		}
+	}
+}

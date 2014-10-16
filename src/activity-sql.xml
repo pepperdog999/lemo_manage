@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlGroup name="activity">
+	<sql id="getActivityList-select">
+		select ai.ActivityID,ai.ActivityName Info1,ai.Desc Info2,ei.AreaName AddressInfo,ai.StartTime TimeInfo,pp.PhotoURL
+	</sql>
+	<sql id="getActivityList-from">		
+		from mall_activityinfo ai
+		left join (select min(PhotoID) PhotoID,ActivityID,PhotoURL from mall_activitygallary ag group by ag.ActivityID) pp on pp.ActivityID=ai.ActivityID
+		left join mall_areainfo ei on ei.AreaID=ai.AreaID
+		where ai.intState=1 and ai.MallID=?
+	</sql>
+	<sql id="getActivityListByArea">
+		select ai.ActivityID,ai.ActivityName Info1,ai.Desc Info2,ei.AreaName AddressInfo,ai.StartTime TimeInfo,pp.PhotoURL	
+		from mall_activityinfo ai
+		left join (select min(PhotoID) PhotoID,ActivityID,PhotoURL from mall_activitygallary ag group by ag.ActivityID) pp on pp.ActivityID=ai.ActivityID
+		left join mall_areainfo ei on ei.AreaID=ai.AreaID
+		where ai.intState=1 and ai.AreaID=?
+	</sql>
+	<sql id="getActivityInfo">
+		select ai.ActivityID,ai.ActivityName,ai.ActivityCode,ai.Content,ai.Desc
+		,ei.AreaID,ei.AreaName AddressInfo,ai.StartTime TimeInfo,ai.ContactInfo
+		,IFNULL(uf.FollowID,0) FollowID,IFNULL(ue.EnrollID,0) EnrollID
+		from mall_activityinfo ai
+		left join mall_areainfo ei on ei.AreaID=ai.AreaID
+		left join sys_userfollow uf on uf.ActivityID=ai.ActivityID and uf.UserID=?
+		left join sys_userenroll ue on ue.ActivityID=ai.ActivityID and ue.UserID=?
+		where ai.intState=1 and ai.ActivityID=?
+	</sql>
+	<sql id="getActivityListByBeacon">
+		select ai.ActivityID DataID,'A' Type,ai.ActivityName Info1,ai.Desc Info2,ei.AreaName AddressInfo,ai.StartTime TimeInfo,pp.PhotoURL
+		from mall_activityinfo ai
+		left join (select min(PhotoID) PhotoID,ActivityID,PhotoURL from mall_activitygallary ag group by ag.ActivityID) pp on pp.ActivityID=ai.ActivityID
+		left join mall_areainfo ei on ei.AreaID=ai.AreaID
+		left join mall_baseinfo bi on bi.MallID=ai.MallID
+		where ai.intState=1 and bi.BeaconUID=? and ei.Major=?
+	</sql>
+</sqlGroup>
+
